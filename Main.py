@@ -1,50 +1,59 @@
 "This script will compare current data in VotoSocial against the data backup taken on Monday"
 
 import csv
-import os
 import pandas
+import requests
 from pymongo import MongoClient
+import Settings
 from urllib import quote_plus
 
-mongo_username = os.environ["ACTASDB_USERNAME"]
-mongo_password = os.environ["ACTASDB_PASSWORD"]
-if os.name == 'nt':
-    mongo_password = mongo_password.replace('^','')
-mongo_collections = [
-    'ActasPresidenciales',
-    'ActasPresidenciales2',
-    'ActasPresidenciales3',
-    'ActasPresidenciales4',
-    'ActasPresidenciales5',
-    'ActasPresidenciales6']
+def obtener_votos(votos):
+    "Devuelve una tupla de 2 elementos (votos_alianza, votos_nacional)"
+    for voto in votos:
+        if voto['CodPartido'] == 2:
+            votos_nacional = int(voto['NumVotos'])
+        elif voto['CodPartido'] == 67:
+            votos_alianza = int(voto['NumVotos'])
+    return (votos_alianza, votos_nacional)
 
-data_frame = pandas.read_csv("ActasVotoSocial2017HN.csv", header=0)
-uri = 'mongodb://%s:%s@ds127456-a0.mlab.com:27456/tse_dump?authMechanism=SCRAM-SHA-1' % (quote_plus(mongo_username), quote_plus(mongo_password))
-client = MongoClient(uri)
-db = client['tse_dump']
+def obtener_votos_tse(acta_id):
+    "Llama al API del TSE y devuelve la tupla (votos_alianza, votos_nacional)"
+    acta_url = Settings.tse_api_url.format(acta_id)
+    print "GET: %s" % (acta_url)
+    response = requests.get(acta_url)
+    if response.status_code == 200:
+        votos_alinza, votos_nacional = obtener_votos(response.json()['Votos'])
+        return (votos_alinza, votos_nacional)
+    else:
+        return (-1, -1)
+
+mongo_uri = 'mongodb://{0}:{1}@ds127456-a0.mlab.com:27456/tse_dump?authMechanism=SCRAM-SHA-1'
+mongo_uri = mongo_uri.format(quote_plus(Settings.mongo_username), quote_plus(Settings.mongo_password))
+client = MongoClient(mongo_uri)
+db = client[Settings.mongo_dbname]
 
 with open('ActasInconsistentes.csv', 'wb') as csvfile:
     csv_writer = csv.writer(csvfile, delimiter=' ', quotechar='|', quoting=csv.QUOTE_MINIMAL)
     #Write Headers
-    csv_headers = ['ACTA', 'VOTOS_ALIANZA', 'VOTOS_NACIONAL',
-                   'VOTOS_ORIGINAL_ALIANZA', 'VOTOS_ORIGINAL_NACIONAL']
+    csv_headers = ['ACTA', 'NOM_DEPARTAMENTO', "NOM_MUNICIPIO" 'VOTOS_TSE_ALIANZA', 'VOTOS_TSE_NACIONAL',
+                   'VOTOS_BACKUP_ALIANZA', 'VOTOS_BACKUP_NACIONAL']
     csv_writer.writerow(csv_headers)
-    for row in data_frame.itertuples():
-        acta_id = row.numero
-        for collection in mongo_collections:
-            acta = db[collection].find_one({'CodEstado':10, 'CodActa':acta_id})
-            if acta is not None:
-                originales_nacional = 0
-                originales_alianza = 0
-                votos_nacional = row.nacional
-                votos_alianza = row.libre_pinu
-                csv_row = [acta_id, votos_alianza, votos_nacional]
-                # Partido 2 = Nacional, Partido 67 = Alianza Lire-Pinu
-                for voto in acta['Votos']:
-                    if voto['CodPartido'] == 2:
-                        originales_nacional = voto['NumVotos']
-                    elif voto['CodPartido'] == 67:
-                        originales_alianza = voto['NumVotos']
-                csv_row += [originales_nacional, originales_alianza]
-                if votos_nacional != originales_nacional or votos_alianza != originales_alianza:
+    for collection in Settings.mongo_collections:
+        actas_estado_divulgacion = db[collection].find({'CodEstado':10}).batch_size(100)
+        for acta in actas_estado_divulgacion:
+            acta_id = int(acta['CodActa'])
+            votos_backup_alianza, votos_backup_nacional = obtener_votos(acta['Votos'])
+            votos_tse_alianza, votos_tse_nacional = obtener_votos_tse(acta_id)
+            if votos_tse_alianza == -1 or votos_tse_nacional == -1:
+                continue
+            else:
+                print "Comparando acta %s." % (acta_id)
+                alianza_son_diferentes = votos_backup_alianza != votos_tse_alianza
+                nacional_son_diferentes = votos_backup_nacional != votos_tse_nacional
+                if alianza_son_diferentes or nacional_son_diferentes:
+                    print "Existe incosistencia en votos."
+                    nom_dep = acta["NomDepartamento"]
+                    nom_municipio = acta["NomMunicipio"]
+                    csv_row = [acta_id, nom_dep, nom_municipio, votos_tse_alianza, votos_tse_nacional, 
+                               votos_backup_alianza, votos_backup_nacional]
                     csv_writer.writerow(csv_row)
