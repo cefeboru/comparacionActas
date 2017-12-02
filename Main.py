@@ -1,4 +1,4 @@
-"This script will compare current data in VotoSocial against the data backup taken on Monday"
+"This script will compare current data in TSE API against the data backup taken on Monday"
 
 import csv
 import pandas
