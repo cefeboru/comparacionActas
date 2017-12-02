@@ -35,8 +35,8 @@ db = client[Settings.mongo_dbname]
 with open('ActasInconsistentes.csv', 'wb') as csvfile:
     csv_writer = csv.writer(csvfile, delimiter=' ', quotechar='|', quoting=csv.QUOTE_MINIMAL)
     #Write Headers
-    csv_headers = ['ACTA', 'NOM_DEPARTAMENTO', "NOM_MUNICIPIO" 'VOTOS_TSE_ALIANZA', 'VOTOS_TSE_NACIONAL',
-                   'VOTOS_BACKUP_ALIANZA', 'VOTOS_BACKUP_NACIONAL']
+    csv_headers = ['ACTA', 'NOM_DEPARTAMENTO', 'NOM_MUNICIPIO', 'VOTOS_TSE_ALIANZA',
+                   'VOTOS_TSE_NACIONAL', 'VOTOS_BACKUP_ALIANZA', 'VOTOS_BACKUP_NACIONAL']
     csv_writer.writerow(csv_headers)
     for collection in Settings.mongo_collections:
         actas_estado_divulgacion = db[collection].find({'CodEstado':10}).batch_size(100)
