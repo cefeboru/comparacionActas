@@ -36,25 +36,24 @@ def worker(collection_name):
         csv_headers = ['ACTA', 'NOM_DEPARTAMENTO', 'NOM_MUNICIPIO', 'VOTOS_TSE_ALIANZA',
                     'VOTOS_TSE_NACIONAL', 'VOTOS_BACKUP_ALIANZA', 'VOTOS_BACKUP_NACIONAL']
         csv_writer.writerow(csv_headers)
-        for collection in Settings.mongo_collections:
-            actas_estado_divulgacion = db[collection].find({'CodEstado':10}).batch_size(100)
-            for acta in actas_estado_divulgacion:
-                acta_id = int(acta['CodActa'])
-                votos_backup_alianza, votos_backup_nacional = obtener_votos(acta['Votos'])
-                votos_tse_alianza, votos_tse_nacional = obtener_votos_tse(acta_id)
-                if votos_tse_alianza == -1 or votos_tse_nacional == -1:
-                    continue
-                else:
-                    print "Comparando acta %s." % (acta_id)
-                    alianza_son_diferentes = votos_backup_alianza != votos_tse_alianza
-                    nacional_son_diferentes = votos_backup_nacional != votos_tse_nacional
-                    if alianza_son_diferentes or nacional_son_diferentes:
-                        print "Existe incosistencia en votos."
-                        nom_dep = acta["NomDepartamento"]
-                        nom_municipio = acta["NomMunicipio"]
-                        csv_row = [acta_id, nom_dep, nom_municipio, votos_tse_alianza, votos_tse_nacional, 
+        actas_estado_divulgacion = db[collection_name].find({'CodEstado':10}).batch_size(100)
+        for acta in actas_estado_divulgacion:
+            acta_id = int(acta['CodActa'])
+            votos_backup_alianza, votos_backup_nacional = obtener_votos(acta['Votos'])
+            votos_tse_alianza, votos_tse_nacional = obtener_votos_tse(acta_id)
+            if votos_tse_alianza == -1 or votos_tse_nacional == -1:
+                continue
+            else:
+                print "Comparando acta %s." % (acta_id)
+                alianza_son_diferentes = votos_backup_alianza != votos_tse_alianza
+                nacional_son_diferentes = votos_backup_nacional != votos_tse_nacional
+                if alianza_son_diferentes or nacional_son_diferentes:
+                    print "Existe incosistencia en votos en acta {0}.".format(acta_id)
+                    nom_dep = acta["NomDepartamento"]
+                    nom_municipio = acta["NomMunicipio"]
+                    csv_row = [acta_id, nom_dep, nom_municipio, votos_tse_alianza, votos_tse_nacional, 
                                 votos_backup_alianza, votos_backup_nacional]
-                        csv_writer.writerow(csv_row)
+                    csv_writer.writerow(csv_row)
     return
 
 mongo_uri = 'mongodb://{0}:{1}@ds127456-a0.mlab.com:27456/tse_dump?authMechanism=SCRAM-SHA-1'
